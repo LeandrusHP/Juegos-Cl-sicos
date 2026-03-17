@@ -1,6 +1,6 @@
 // ==========================================
 // GameRoom - Custom Express + Socket.io Server
-// Multi-game support
+// Multi-game support with Reconnection
 // ==========================================
 
 const express = require('express');
@@ -28,6 +28,7 @@ const app = next({ dev });
 const handle = app.getRequestHandler();
 
 const rooms = new Map();
+const sessions = new Map(); // sessionId -> { socketId, username, roomCode, disconnectTimer }
 
 function generateRoomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -45,7 +46,12 @@ function serializeRoom(room) {
     return {
         id: room.id,
         code: room.code,
-        players: room.players,
+        players: room.players.map(p => ({
+            id: p.id,
+            username: p.username,
+            isReady: p.isReady,
+            connected: p.connected
+        })),
         gameType: room.gameType,
         status: room.status,
         hostId: room.hostId,
@@ -60,60 +66,143 @@ app.prepare().then(() => {
     });
 
     io.on('connection', (socket) => {
-        console.log(`🔌 Connected: ${socket.id}`);
+        const { sessionId, username } = socket.handshake.auth;
+        
+        if (!sessionId) {
+            console.log(`❌ Disconnecting socket ${socket.id} due to missing sessionId`);
+            socket.disconnect();
+            return;
+        }
+
+        socket.sessionId = sessionId;
+        let session = sessions.get(sessionId);
+
+        if (session) {
+            console.log(`🔌 Reconnected: ${username || session.username} (${sessionId})`);
+            if (session.disconnectTimer) {
+                clearTimeout(session.disconnectTimer);
+                session.disconnectTimer = null;
+            }
+            session.socketId = socket.id;
+            if (username && username !== session.username) {
+                session.username = username;
+            }
+            
+            // Rejoin room if part of one
+            if (session.roomCode) {
+                socket.join(session.roomCode);
+                socket.roomCode = session.roomCode;
+                const room = rooms.get(session.roomCode);
+                
+                if (room) {
+                    const player = room.players.find(p => p.id === sessionId);
+                    if (player) {
+                        player.socketId = socket.id;
+                        player.connected = true;
+                        
+                        // Let everyone know this player is back online
+                        io.to(session.roomCode).emit('player-reconnected', sessionId);
+                        
+                        // Send the full room state to help them catch up
+                        socket.emit('room-joined', serializeRoom(room));
+                        
+                        // Send game state if playing
+                        if (room.status === 'playing' && room.gameState) {
+                            const symbol = room.playerSymbols[sessionId];
+                            const payload = { gameState: room.gameState, playerSymbol: symbol };
+                            
+                            if (room.gameType === 'battleship') {
+                                payload.gameState = getBattleshipView(room.gameState, symbol);
+                            }
+                            if (room.gameType === 'hangman' && symbol === 'player2' && !room.gameState.isFinished) {
+                                payload.gameState = { ...room.gameState, word: undefined };
+                            }
+                            socket.emit('game-started', payload);
+                        }
+                    } else {
+                        // Shouldn't happen, but clear roomCode if not in room
+                        session.roomCode = null;
+                        socket.roomCode = null;
+                    }
+                } else {
+                    session.roomCode = null;
+                    socket.roomCode = null;
+                }
+            }
+        } else {
+            console.log(`🔌 Connected new session: ${username} (${sessionId})`);
+            session = { socketId: socket.id, username, roomCode: null, disconnectTimer: null };
+            sessions.set(sessionId, session);
+        }
 
         // ==================
         // ROOM MANAGEMENT
         // ==================
 
-        socket.on('create-room', (username) => {
+        socket.on('create-room', (reqUsername) => {
             const code = generateRoomCode();
+            session.roomCode = code;
+            socket.roomCode = code;
+            
             const room = {
                 id: code,
                 code,
-                players: [{ id: socket.id, username, isReady: false }],
+                players: [{ id: sessionId, socketId: socket.id, username: reqUsername || session.username, isReady: false, connected: true }],
                 gameType: 'tic-tac-toe',
                 status: 'waiting',
-                hostId: socket.id,
+                hostId: sessionId,
                 gameState: null,
                 playerSymbols: {},
                 rematchVotes: new Set(),
             };
             rooms.set(code, room);
             socket.join(code);
-            socket.roomCode = code;
             socket.emit('room-created', serializeRoom(room));
-            console.log(`🏠 Room ${code} created by ${username}`);
+            console.log(`🏠 Room ${code} created by ${session.username}`);
         });
 
-        socket.on('join-room', ({ code, username }) => {
+        socket.on('join-room', ({ code, username: reqUsername }) => {
             const upperCode = code.toUpperCase();
             const room = rooms.get(upperCode);
+            
             if (!room) return socket.emit('error', 'Sala no encontrada. Verifica el código.');
+            
+            // Check if user is already in this room
+            if (room.players.some(p => p.id === sessionId)) {
+                session.roomCode = upperCode;
+                socket.roomCode = upperCode;
+                socket.join(upperCode);
+                socket.emit('room-joined', serializeRoom(room));
+                return;
+            }
+
             if (room.players.length >= 2) return socket.emit('error', 'La sala está llena.');
             if (room.status === 'playing') return socket.emit('error', 'La partida ya ha comenzado.');
 
-            const player = { id: socket.id, username, isReady: false };
+            const player = { id: sessionId, socketId: socket.id, username: reqUsername || session.username, isReady: false, connected: true };
             room.players.push(player);
-            socket.join(upperCode);
+            
+            session.roomCode = upperCode;
             socket.roomCode = upperCode;
+            socket.join(upperCode);
+            
             socket.emit('room-joined', serializeRoom(room));
             socket.to(upperCode).emit('player-joined', player);
-            console.log(`👤 ${username} joined ${upperCode}`);
+            console.log(`👤 ${session.username} joined ${upperCode}`);
         });
 
         socket.on('toggle-ready', (roomCode) => {
             const room = rooms.get(roomCode);
             if (!room) return;
-            const player = room.players.find(p => p.id === socket.id);
+            const player = room.players.find(p => p.id === sessionId);
             if (!player) return;
             player.isReady = !player.isReady;
-            io.to(roomCode).emit('player-ready-changed', { playerId: socket.id, isReady: player.isReady });
+            io.to(roomCode).emit('player-ready-changed', { playerId: sessionId, isReady: player.isReady });
         });
 
         socket.on('set-game-type', ({ roomCode, gameType }) => {
             const room = rooms.get(roomCode);
-            if (!room || room.hostId !== socket.id) return;
+            if (!room || room.hostId !== sessionId) return;
             room.gameType = gameType;
             io.to(roomCode).emit('game-type-changed', gameType);
         });
@@ -124,7 +213,7 @@ app.prepare().then(() => {
 
         socket.on('start-game', (roomCode) => {
             const room = rooms.get(roomCode);
-            if (!room || room.hostId !== socket.id) return;
+            if (!room || room.hostId !== sessionId) return;
             if (room.players.length < 2 || !room.players.every(p => p.isReady)) return;
 
             const engine = gameEngines[room.gameType];
@@ -153,32 +242,27 @@ app.prepare().then(() => {
                     break;
                 case 'hangman':
                     room.playerSymbols = { [p1]: 'player1', [p2]: 'player2' };
-                    // Player2 guesses, Player1 watches the word
                     room.gameState.currentTurn = 'player2';
                     break;
             }
 
-            // Preserve scores from rematches
             if (room.previousScores) {
                 room.gameState.scores = room.previousScores;
                 room.previousScores = null;
             }
 
-            // Send game state to each player
             room.players.forEach(player => {
                 const symbol = room.playerSymbols[player.id];
                 const payload = { gameState: room.gameState, playerSymbol: symbol };
 
-                // For battleship, only send own ships, not opponent's
                 if (room.gameType === 'battleship') {
                     payload.gameState = getBattleshipView(room.gameState, symbol);
                 }
-                // For hangman, don't reveal the word to the guesser
                 if (room.gameType === 'hangman' && symbol === 'player2') {
                     payload.gameState = { ...room.gameState, word: undefined };
                 }
 
-                io.to(player.id).emit('game-started', payload);
+                io.to(player.socketId).emit('game-started', payload);
             });
 
             console.log(`🎮 ${room.gameType} started in ${roomCode}`);
@@ -192,7 +276,7 @@ app.prepare().then(() => {
             const room = rooms.get(roomCode);
             if (!room || !room.gameState) return;
 
-            const symbol = room.playerSymbols[socket.id];
+            const symbol = room.playerSymbols[sessionId];
             if (!symbol) return;
 
             let newState = null;
@@ -229,13 +313,12 @@ app.prepare().then(() => {
             }
 
             if (!newState) {
-                socket.emit('error', 'Movimiento inválido.');
+                socket.emit('error', 'Movimiento inválido o no es tu turno.');
                 return;
             }
 
             room.gameState = newState;
 
-            // Send appropriate views to each player
             room.players.forEach(player => {
                 const playerSymbol = room.playerSymbols[player.id];
                 let stateView = newState;
@@ -247,7 +330,7 @@ app.prepare().then(() => {
                     stateView = { ...newState, word: undefined };
                 }
 
-                io.to(player.id).emit('game-state-updated', stateView);
+                io.to(player.socketId).emit('game-state-updated', stateView);
             });
 
             // Check game over
@@ -268,7 +351,7 @@ app.prepare().then(() => {
             const room = rooms.get(roomCode);
             if (!room) return;
 
-            room.rematchVotes.add(socket.id);
+            room.rematchVotes.add(sessionId);
             if (room.rematchVotes.size >= 2) {
                 const prevScores = room.gameState ? { ...room.gameState.scores } : null;
                 const engine = gameEngines[room.gameType];
@@ -297,7 +380,6 @@ app.prepare().then(() => {
                         [entries[1][0]]: entries[1][1] === 'white' ? 'black' : 'white',
                     };
                 } else if (room.gameType === 'hangman') {
-                    // Swap guesser/picker roles
                     room.gameState.currentTurn = room.playerSymbols[entries[1][0]] === 'player2' ? 'player1' : 'player2';
                     room.playerSymbols = {
                         [entries[0][0]]: entries[0][1] === 'player1' ? 'player2' : 'player1',
@@ -316,7 +398,7 @@ app.prepare().then(() => {
                         payload.gameState = { ...room.gameState, word: undefined };
                     }
 
-                    io.to(player.id).emit('game-started', payload);
+                    io.to(player.socketId).emit('game-started', payload);
                 });
 
                 console.log(`🔄 Rematch in ${roomCode}`);
@@ -327,26 +409,63 @@ app.prepare().then(() => {
         // LEAVE / DISCONNECT
         // ==================
 
-        socket.on('leave-room', (roomCode) => handlePlayerLeave(socket, roomCode));
+        socket.on('leave-room', (roomCode) => {
+            handlePlayerLeave(sessionId, roomCode, true);
+        });
+
         socket.on('disconnect', () => {
-            console.log(`❌ Disconnected: ${socket.id}`);
-            if (socket.roomCode) handlePlayerLeave(socket, socket.roomCode);
+            console.log(`⚠️ Disconnected: ${session.username} (${sessionId})`);
+            if (session.roomCode) {
+                const room = rooms.get(session.roomCode);
+                if (room) {
+                    const player = room.players.find(p => p.id === sessionId);
+                    if (player) {
+                        player.connected = false;
+                        io.to(session.roomCode).emit('opponent-disconnected', sessionId);
+                        
+                        // Set 60-second timer to fully disconnect and end the room
+                        session.disconnectTimer = setTimeout(() => {
+                            handlePlayerLeave(sessionId, session.roomCode, false);
+                        }, 60000);
+                    }
+                }
+            }
         });
     });
 
-    function handlePlayerLeave(socket, roomCode) {
+    function handlePlayerLeave(sessId, roomCode, explicitLeave) {
         const room = rooms.get(roomCode);
         if (!room) return;
-        room.players = room.players.filter(p => p.id !== socket.id);
-        socket.leave(roomCode);
-        socket.roomCode = null;
+        
+        const session = sessions.get(sessId);
+        if (session) {
+            session.roomCode = null;
+            if (session.disconnectTimer) {
+                clearTimeout(session.disconnectTimer);
+                session.disconnectTimer = null;
+            }
+        }
+
+        room.players = room.players.filter(p => p.id !== sessId);
+        
         if (room.players.length === 0) {
             rooms.delete(roomCode);
         } else {
-            io.to(roomCode).emit('player-left', socket.id);
-            io.to(roomCode).emit('opponent-disconnected');
-            if (room.status === 'playing') room.status = 'finished';
-            if (room.hostId === socket.id) room.hostId = room.players[0].id;
+            io.to(roomCode).emit('player-left', sessId);
+            
+            // If they left during a game, auto-resign them or end game
+            if (room.status === 'playing') {
+                room.status = 'finished';
+                // Find remaining player
+                const winnerId = room.players[0].id;
+                const winnerSymbol = room.playerSymbols[winnerId];
+                
+                // Emulate game over with remaining player as winner
+                io.to(roomCode).emit('game-over', { winner: winnerSymbol, isDraw: false, reason: 'opponent_abandoned' });
+            }
+            if (room.hostId === sessId) {
+                room.hostId = room.players[0].id;
+            }
         }
     }
 
@@ -361,7 +480,7 @@ app.prepare().then(() => {
             boards: {
                 mine: state.boards[playerKey],
                 opponent: {
-                    ships: null, // Hide opponent ships
+                    ships: null,
                     shots: state.boards[opponentKey].shots,
                     shipsPlaced: state.boards[opponentKey].shipsPlaced,
                 },

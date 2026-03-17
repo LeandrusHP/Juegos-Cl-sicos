@@ -12,7 +12,7 @@ import type { GameType } from '@/types';
 export default function RoomPage({ params }: { params: Promise<{ roomId: string }> }) {
     const { roomId } = use(params);
     const router = useRouter();
-    const { username, socketId } = useConnectionStore();
+    const { username, sessionId } = useConnectionStore();
     const { currentRoom, setRoom, addPlayer, removePlayer, setPlayerReady, setGameType, setError, error } = useLobbyStore();
     const { setGameState, setMySymbol, reset: resetGame } = useGameStore();
 
@@ -32,6 +32,14 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
 
         socket.on('player-left', (playerId) => {
             removePlayer(playerId);
+        });
+
+        socket.on('player-reconnected', (playerId) => {
+            useLobbyStore.getState().setPlayerConnection(playerId, true);
+        });
+
+        socket.on('opponent-disconnected', (playerId) => {
+            if (playerId) useLobbyStore.getState().setPlayerConnection(playerId, false);
         });
 
         socket.on('player-ready-changed', ({ playerId, isReady }) => {
@@ -108,9 +116,9 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         );
     }
 
-    const isHost = currentRoom.hostId === socketId;
+    const isHost = currentRoom.hostId === sessionId;
     const allReady = currentRoom.players.length === 2 && currentRoom.players.every(p => p.isReady);
-    const mePlayer = currentRoom.players.find(p => p.id === socketId);
+    const mePlayer = currentRoom.players.find(p => p.id === sessionId);
 
     return (
         <div className="flex-1 flex items-center justify-center px-4 py-8">
@@ -150,22 +158,27 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                                     }`}
                             >
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${player.id === socketId
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${player.id === sessionId
                                             ? 'bg-primary-600/30 text-primary-300'
-                                            : 'bg-accent-600/30 text-accent-300'
+                                            : !player.connected
+                                                ? 'bg-surface-600/30 text-surface-400'
+                                                : 'bg-accent-600/30 text-accent-300'
                                         }`}>
                                         {player.username.charAt(0).toUpperCase()}
                                     </div>
                                     <div>
                                         <span className="font-semibold text-white">
                                             {player.username}
+                                            {player.connected === false && (
+                                                <span className="ml-2 text-xs text-red-400 font-normal">Desconectado</span>
+                                            )}
                                         </span>
                                         {player.id === currentRoom.hostId && (
                                             <span className="ml-2 text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full">
                                                 👑 Host
                                             </span>
                                         )}
-                                        {player.id === socketId && (
+                                        {player.id === sessionId && (
                                             <span className="ml-2 text-xs text-surface-500">(Tú)</span>
                                         )}
                                     </div>

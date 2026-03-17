@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { Chess } from 'chess.js';
 
 interface ChessBoardProps {
     fen: string;
@@ -59,6 +60,18 @@ export default function ChessBoard({
     const board = useMemo(() => fenToBoard(fen), [fen]);
     const isFlipped = myColor === 'black';
 
+    const validMoves = useMemo(() => {
+        if (!fen || !isMyTurn || disabled || !selectedSquare) return [];
+        try {
+            const chess = new Chess(fen);
+            const turn = fen.split(' ')[1];
+            if ((myColor === 'white' && turn !== 'w') || (myColor === 'black' && turn !== 'b')) return [];
+            return chess.moves({ square: selectedSquare as any, verbose: true });
+        } catch (e) {
+            return [];
+        }
+    }, [fen, isMyTurn, disabled, selectedSquare, myColor]);
+
     const findKingPosition = useCallback((): string | null => {
         const currentTurn = fen.split(' ')[1];
         const kingChar = currentTurn === 'w' ? 'K' : 'k';
@@ -84,13 +97,25 @@ export default function ChessBoard({
                 return;
             }
 
-            // Check for pawn promotion
-            const srcRow = 8 - parseInt(selectedSquare[1]);
-            const srcPiece = board[srcRow][selectedSquare.charCodeAt(0) - 97];
-            const isPawn = srcPiece === 'P' || srcPiece === 'p';
-            const isPromotionRow = (srcPiece === 'P' && row === 0) || (srcPiece === 'p' && row === 7);
+            const move = validMoves.find((m: any) => m.to === alg);
+            
+            if (!move) {
+                // If they clicked another valid piece of theirs, select it instead of cancelling
+                if (piece) {
+                    const isWhitePiece = piece === piece.toUpperCase();
+                    const canSelect = (myColor === 'white' && isWhitePiece) || (myColor === 'black' && !isWhitePiece);
+                    if (canSelect) {
+                        setSelectedSquare(alg);
+                        return;
+                    }
+                }
+                setSelectedSquare(null);
+                return;
+            }
 
-            if (isPawn && isPromotionRow) {
+            // Check for pawn promotion
+            if (move.promotion || move.flags?.includes('p')) {
+                // The chess.js gives 'p' flag for promotion
                 setShowPromotion({ from: selectedSquare, to: alg });
                 setSelectedSquare(null);
                 return;
@@ -129,6 +154,7 @@ export default function ChessBoard({
                     const piece = board[r][c];
                     const isLight = (r + c) % 2 === 0;
                     const isSelected = selectedSquare === alg;
+                    const isValidMove = validMoves.some((m: any) => m.to === alg);
                     const isLastMove = lastMove && (lastMove.from === alg || lastMove.to === alg);
                     const isKingCheck = kingInCheck === alg;
 
@@ -138,14 +164,20 @@ export default function ChessBoard({
                             onClick={() => handleSquareClick(r, c)}
                             className={`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center text-xl sm:text-2xl transition-all relative
                 ${isLight ? 'bg-amber-100/80' : 'bg-amber-800/60'}
-                ${isSelected ? 'ring-2 ring-primary-400 z-10' : ''}
-                ${isLastMove ? 'bg-emerald-400/30' : ''}
+                ${isSelected ? 'bg-amber-400/50' : ''}
+                ${isLastMove && !isSelected ? 'bg-emerald-400/30' : ''}
                 ${isKingCheck ? 'bg-red-500/40 ring-2 ring-red-400' : ''}
                 ${!disabled && isMyTurn ? 'cursor-pointer hover:brightness-110' : 'cursor-default'}
               `}
                         >
+                            {isValidMove && !piece && (
+                                <div className="absolute w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-black/20" />
+                            )}
+                            {isValidMove && piece && (
+                                <div className="absolute inset-0 ring-4 ring-inset ring-black/20 rounded" />
+                            )}
                             {piece && (
-                                <span className={`${piece === piece.toUpperCase() ? 'drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]' : 'drop-shadow-[0_1px_1px_rgba(255,255,255,0.3)]'}`}>
+                                <span className={`z-10 ${piece === piece.toUpperCase() ? 'drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]' : 'drop-shadow-[0_1px_1px_rgba(255,255,255,0.3)]'}`}>
                                     {PIECE_UNICODE[piece]}
                                 </span>
                             )}

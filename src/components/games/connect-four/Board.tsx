@@ -63,7 +63,7 @@ export default function ConnectFourBoard({
                   `}
                                 >
                                     {cell && (
-                                        <div className="w-3/4 h-3/4 rounded-full animate-pop-in"
+                                        <div className="w-3/4 h-3/4 rounded-full animate-drop-in shadow-inner"
                                             style={{
                                                 background: cell === 'red'
                                                     ? 'radial-gradient(circle at 30% 30%, #ff6b6b, #c92a2a)'

@@ -2,6 +2,7 @@
 
 import { io, Socket } from 'socket.io-client';
 import type { ServerToClientEvents, ClientToServerEvents } from '@/types';
+import { useConnectionStore } from '@/stores/useConnectionStore';
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -12,7 +13,7 @@ export const getSocket = (): TypedSocket => {
         socket = io({
             autoConnect: false,
             reconnection: true,
-            reconnectionAttempts: 5,
+            reconnectionAttempts: 10,
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,
             timeout: 10000,
@@ -23,6 +24,9 @@ export const getSocket = (): TypedSocket => {
 
 export const connectSocket = (): TypedSocket => {
     const s = getSocket();
+    const { sessionId, username } = useConnectionStore.getState();
+    s.auth = { sessionId, username };
+
     if (!s.connected) {
         s.connect();
     }

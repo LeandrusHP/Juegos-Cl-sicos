@@ -23,7 +23,7 @@ import GenericGameOver from '@/components/games/GenericGameOver';
 export default function GamePage({ params }: { params: Promise<{ roomId: string }> }) {
     const { roomId } = use(params);
     const router = useRouter();
-    const { username, socketId } = useConnectionStore();
+    const { username, sessionId } = useConnectionStore();
     const { currentRoom } = useLobbyStore();
     const {
         gameState,
@@ -93,7 +93,8 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
     }
 
     const gs: any = gameState;
-    const opponent = currentRoom?.players.find(p => p.id !== socketId);
+    const opponent = currentRoom?.players.find(p => p.id !== sessionId);
+    const isOpponentDisconnected = opponentDisconnected || (opponent && opponent.connected === false);
     const isGameOver = determineGameOver(gameType, gs);
 
     // ==========================================
@@ -174,7 +175,7 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
         <div className="flex-1 flex flex-col items-center justify-start px-4 py-6 overflow-y-auto">
             <div className="w-full max-w-lg animate-fade-in">
                 {/* Disconnect Warning */}
-                {opponentDisconnected && (
+                {isOpponentDisconnected && (
                     <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-400/20 text-amber-300 text-sm text-center animate-slide-down">
                         ⚠️ Tu oponente se ha desconectado
                     </div>

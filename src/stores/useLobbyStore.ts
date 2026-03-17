@@ -12,6 +12,7 @@ interface LobbyState {
     addPlayer: (player: Player) => void;
     removePlayer: (playerId: string) => void;
     setPlayerReady: (playerId: string, isReady: boolean) => void;
+    setPlayerConnection: (playerId: string, connected: boolean) => void;
     setGameType: (gameType: GameType) => void;
     setError: (error: string | null) => void;
     setLoading: (loading: boolean) => void;
@@ -65,6 +66,18 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
                 : null,
         })),
 
+    setPlayerConnection: (playerId, connected) =>
+        set((state) => ({
+            currentRoom: state.currentRoom
+                ? {
+                    ...state.currentRoom,
+                    players: state.currentRoom.players.map((p) =>
+                        p.id === playerId ? { ...p, connected } : p
+                    ),
+                }
+                : null,
+        })),
+
     setGameType: (gameType) =>
         set((state) => ({
             currentRoom: state.currentRoom
@@ -75,9 +88,9 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
     setError: (error) => set({ error }),
     setLoading: (isLoading) => set({ isLoading }),
 
-    isHost: (socketId) => {
+    isHost: (sessionId) => {
         const room = get().currentRoom;
-        return room ? room.hostId === socketId : false;
+        return room ? room.hostId === sessionId : false;
     },
 
     reset: () => set({ currentRoom: null, error: null, isLoading: false }),

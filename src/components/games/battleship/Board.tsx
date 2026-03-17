@@ -47,6 +47,32 @@ export default function BattleshipBoard({
     const [selectedShip, setSelectedShip] = useState<number | null>(null);
     const [isHorizontal, setIsHorizontal] = useState(true);
     const [activeGrid, setActiveGrid] = useState<'mine' | 'opponent'>('mine');
+    const [hoveredCell, setHoveredCell] = useState<[number, number] | null>(null);
+
+    const getPreviewState = (r: number, c: number): 'valid' | 'invalid' | null => {
+        if (!hoveredCell || selectedShip === null || myBoard.shipsPlaced.includes(selectedShip) || phase !== 'placing') return null;
+        
+        const size = SHIP_TYPES[selectedShip].size;
+        const [hr, hc] = hoveredCell;
+        
+        const isHovered = isHorizontal 
+            ? (r === hr && c >= hc && c < hc + size) 
+            : (c === hc && r >= hr && r < hr + size);
+            
+        if (!isHovered) return null;
+        
+        // Check validity for the whole placement
+        let valid = true;
+        for (let i = 0; i < size; i++) {
+            const tr = isHorizontal ? hr : hr + i;
+            const tc = isHorizontal ? hc + i : hc;
+            if (tr >= 10 || tc >= 10 || myBoard.ships[tr]?.[tc] !== null) {
+                valid = false;
+                break;
+            }
+        }
+        return valid ? 'valid' : 'invalid';
+    };
 
     const renderGrid = (
         grid: (string | number | null)[][],
@@ -68,27 +94,63 @@ export default function BattleshipBoard({
                     {row.map((cell, ci) => {
                         const shot = shots?.[ri]?.[ci];
                         const hasShip = !isOpponent && cell !== null;
+                        const preview = !isOpponent ? getPreviewState(ri, ci) : null;
+
+                        let borderClass = isOpponent ? 'border border-white/10' : 'border border-white/5';
+                        let roundedClass = 'rounded-md';
+                        let bgClass = isOpponent && onClick && !disabled && shot === null ? 'bg-white/5 hover:bg-primary-500/20 hover:border-primary-400/30 select-none' : 'bg-white/5';
+                        let textClass = 'text-surface-500';
+                        let content = '';
+
+                        if (shot === 'hit') {
+                            bgClass = 'bg-red-500/20';
+                            borderClass = 'border border-red-400/50';
+                            content = '🔥';
+                        } else if (shot === 'miss') {
+                            bgClass = 'bg-surface-700/30';
+                            borderClass = 'border border-surface-600/30';
+                            content = '💧';
+                        } else if (preview) {
+                            bgClass = preview === 'valid' ? 'bg-emerald-500/40' : 'bg-red-500/40';
+                            borderClass = preview === 'valid' ? 'border border-emerald-400/60' : 'border border-red-400/60';
+                        } else if (hasShip) {
+                            bgClass = 'bg-primary-600/30';
+                            // Contiguous logic
+                            const t = ri > 0 && grid[ri - 1][ci] === cell;
+                            const b = ri < 9 && grid[ri + 1][ci] === cell;
+                            const l = ci > 0 && ri < 10 && grid[ri][ci - 1] === cell;
+                            const r = ci < 9 && ri < 10 && grid[ri][ci + 1] === cell;
+                            
+                            roundedClass = `${!t && !l ? 'rounded-tl-[8px]' : 'rounded-tl-[1px]'} ${!t && !r ? 'rounded-tr-[8px]' : 'rounded-tr-[1px]'} ${!b && !l ? 'rounded-bl-[8px]' : 'rounded-bl-[1px]'} ${!b && !r ? 'rounded-br-[8px]' : 'rounded-br-[1px]'}`;
+                            
+                            const bt = t ? 'border-t border-t-primary-500/30' : 'border-t-2 border-t-primary-400/80';
+                            const bb = b ? 'border-b border-b-primary-500/30' : 'border-b-2 border-b-primary-400/80';
+                            const bl = l ? 'border-l border-l-primary-500/30' : 'border-l-2 border-l-primary-400/80';
+                            const br = r ? 'border-r border-r-primary-500/30' : 'border-r-2 border-r-primary-400/80';
+                            
+                            borderClass = `${bt} ${bb} ${bl} ${br} border-solid`;
+                            
+                            // Show emoji at the start of the ship
+                            if (!t && !l) {
+                                content = SHIP_TYPES[cell as number]?.emoji || '▪';
+                            }
+                        }
+
+                        const isLastShot = lastShot && lastShot.row === ri && lastShot.col === ci;
 
                         return (
                             <button
                                 key={ci}
                                 onClick={() => onClick?.(ri, ci)}
+                                onMouseEnter={() => setHoveredCell([ri, ci])}
+                                onMouseLeave={() => setHoveredCell(null)}
                                 disabled={!onClick || (isOpponent && shot !== null) || disabled}
-                                className={`aspect-square rounded-sm text-[10px] flex items-center justify-center transition-all border
-                  ${shot === 'hit'
-                                        ? 'bg-red-500/40 border-red-400/50 text-red-300'
-                                        : shot === 'miss'
-                                            ? 'bg-surface-700/30 border-surface-600/30 text-surface-500'
-                                            : hasShip
-                                                ? 'bg-primary-600/30 border-primary-400/30'
-                                                : isOpponent && onClick && !disabled
-                                                    ? 'bg-white/5 border-white/10 hover:bg-primary-500/20 hover:border-primary-400/30 cursor-pointer'
-                                                    : 'bg-white/5 border-white/10'
-                                    }
-                  ${lastShot && lastShot.row === ri && lastShot.col === ci ? 'ring-1 ring-amber-400/50' : ''}
-                `}
+                                className={`aspect-square text-[10px] sm:text-xs flex items-center justify-center transition-all 
+                                    ${roundedClass} ${borderClass} ${bgClass} ${textClass}
+                                    ${isLastShot ? 'ring-2 ring-amber-400 animate-pulse' : ''}
+                                `}
                             >
-                                {shot === 'hit' ? '💥' : shot === 'miss' ? '•' : hasShip ? '▪' : ''}
+                                {content && <span className={shot === 'hit' ? 'animate-bounce-subtle drop-shadow' : ''}>{content}</span>}
                             </button>
                         );
                     })}

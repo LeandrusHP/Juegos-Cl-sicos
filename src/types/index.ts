@@ -8,6 +8,7 @@ export interface Player {
     id: string;
     username: string;
     isReady: boolean;
+    connected?: boolean;
 }
 
 export interface Room {
@@ -60,7 +61,8 @@ export interface ServerToClientEvents {
     'game-state-updated': (gameState: TicTacToeState) => void;
     'game-over': (data: { winner: 'X' | 'O' | null; isDraw: boolean; winningLine: number[] | null }) => void;
     'rematch-started': (gameState: TicTacToeState) => void;
-    'opponent-disconnected': () => void;
+    'player-reconnected': (playerId: string) => void;
+    'opponent-disconnected': (playerId?: string) => void;
     'opponent-reconnected': () => void;
     'error': (message: string) => void;
 }
