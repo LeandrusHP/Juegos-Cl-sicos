@@ -16,10 +16,21 @@ export default function LobbyPage() {
     const { setRoom, error, setError, isLoading, setLoading } = useLobbyStore();
     const router = useRouter();
 
-    // Redirect if no username
+    // Redirect if no username, or prepopulate join code
     useEffect(() => {
         if (!username) {
             router.push('/');
+        } else {
+            const state = useConnectionStore.getState();
+            if (state.recentRoomCode && state.recentRoomTime) {
+                const elapsed = Date.now() - state.recentRoomTime;
+                if (elapsed < 300000) { // 5 minutes
+                    setJoinCode(state.recentRoomCode);
+                    setActiveTab('join');
+                } else {
+                    state.clearRecentRoom();
+                }
+            }
         }
     }, [username, router]);
 

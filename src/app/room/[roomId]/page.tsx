@@ -96,6 +96,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         const socket = getSocket();
         socket.emit('leave-room', roomId);
         useLobbyStore.getState().reset();
+        useConnectionStore.getState().clearRecentRoom();
         router.push('/lobby');
     };
 

@@ -58,6 +58,9 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
             resetGame();
             router.push(`/room/${roomId}`);
         });
+        socket.on('room-joined', () => {
+             useConnectionStore.getState().setRecentRoom(roomId);
+        });
         return socket;
     }, [setGameState, setMySymbol, setOpponentDisconnected, resetGame, router, roomId]);
 
@@ -84,6 +87,7 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
         getSocket().emit('leave-room', roomId);
         resetGame();
         useLobbyStore.getState().reset();
+        useConnectionStore.getState().clearRecentRoom();
         router.push('/lobby');
     };
 
