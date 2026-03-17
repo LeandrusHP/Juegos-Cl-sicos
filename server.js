@@ -242,7 +242,6 @@ app.prepare().then(() => {
                     break;
                 case 'hangman':
                     room.playerSymbols = { [p1]: 'player1', [p2]: 'player2' };
-                    room.gameState.currentTurn = 'player2';
                     break;
             }
 
@@ -399,7 +398,6 @@ app.prepare().then(() => {
                         [entries[1][0]]: entries[1][1] === 'white' ? 'black' : 'white',
                     };
                 } else if (room.gameType === 'hangman') {
-                    room.gameState.currentTurn = room.playerSymbols[entries[1][0]] === 'player2' ? 'player1' : 'player2';
                     room.playerSymbols = {
                         [entries[0][0]]: entries[0][1] === 'player1' ? 'player2' : 'player1',
                         [entries[1][0]]: entries[1][1] === 'player1' ? 'player2' : 'player1',
