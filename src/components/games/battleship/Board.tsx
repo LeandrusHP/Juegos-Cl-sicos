@@ -246,7 +246,7 @@ export default function BattleshipBoard({
                     <h3 className="text-xs font-semibold text-red-300 mb-2 text-center">🎯 Tablero Enemigo</h3>
                     {renderGrid(
                         Array(10).fill(null).map(() => Array(10).fill(null)),
-                        opponentBoard.shots,
+                        myBoard.shots,
                         true,
                         isMyTurn && !disabled ? onShoot : undefined
                     )}
@@ -255,7 +255,7 @@ export default function BattleshipBoard({
                 {/* My grid */}
                 <div className={`glass rounded-2xl p-3 ${activeGrid !== 'mine' ? 'hidden sm:block' : ''}`}>
                     <h3 className="text-xs font-semibold text-primary-300 mb-2 text-center">🛡️ Mi Flota</h3>
-                    {renderGrid(myBoard.ships, myBoard.shots, false)}
+                    {renderGrid(myBoard.ships, opponentBoard.shots, false)}
                 </div>
             </div>
         </div>

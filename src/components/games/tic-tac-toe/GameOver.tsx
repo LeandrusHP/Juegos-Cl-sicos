@@ -6,6 +6,7 @@ interface GameOverProps {
     mySymbol: 'X' | 'O';
     scores: { X: number; O: number; draws: number };
     onRematch: () => void;
+    onReturnToLobby: () => void;
     onLeave: () => void;
 }
 
@@ -15,6 +16,7 @@ export default function GameOver({
     mySymbol,
     scores,
     onRematch,
+    onReturnToLobby,
     onLeave,
 }: GameOverProps) {
     const iWon = winner === mySymbol;
@@ -67,8 +69,11 @@ export default function GameOver({
                     <button onClick={onRematch} className="btn-primary w-full py-3">
                         🔄 Revancha
                     </button>
-                    <button onClick={onLeave} className="btn-secondary w-full py-3 text-sm">
-                        🚪 Salir
+                    <button onClick={onReturnToLobby} className="btn-secondary w-full py-3">
+                        🏠 Volver a la Sala
+                    </button>
+                    <button onClick={onLeave} className="w-full py-3 text-sm text-surface-500 hover:text-red-400 transition-colors">
+                        🚪 Salir por completo
                     </button>
                 </div>
             </div>

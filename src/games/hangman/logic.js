@@ -38,23 +38,44 @@ const WORDS = [
 const MAX_WRONG = 6;
 
 function createInitialState() {
-    const wordData = WORDS[Math.floor(Math.random() * WORDS.length)];
     return {
-        word: wordData.word,
-        hint: wordData.hint,
+        phase: 'picking',
+        word: '',
+        hint: '',
         guessedLetters: [],
         wrongLetters: [],
         wrongCount: 0,
         maxWrong: MAX_WRONG,
-        currentTurn: 'player1', // Player1 picks, Player2 guesses (or vice versa)
-        winner: null, // 'guesser' or 'picker'
+        currentTurn: 'player1', // player1 is picker
+        picker: 'player1',
+        guesser: 'player2',
+        winner: null,
         isFinished: false,
-        revealedWord: wordData.word.split('').map(() => '_'),
+        revealedWord: [],
         scores: { player1: 0, player2: 0, draws: 0 },
     };
 }
 
+function setWord(state, word, hint, pickerKey) {
+    if (state.phase !== 'picking') return null;
+    if (state.picker !== pickerKey) return null;
+    if (!word || typeof word !== 'string') return null;
+
+    const cleanWord = word.trim().toUpperCase().replace(/[^A-ZÑ]/g, '');
+    if (cleanWord.length === 0) return null;
+
+    return {
+        ...state,
+        phase: 'playing',
+        word: cleanWord,
+        hint: hint || 'Sin pista',
+        revealedWord: cleanWord.split('').map(() => '_'),
+        currentTurn: state.guesser,
+    };
+}
+
 function guessLetter(state, letter, guesserKey) {
+    if (state.phase !== 'playing') return null;
     if (state.isFinished) return null;
     if (state.currentTurn !== guesserKey) return null;
 
@@ -110,4 +131,4 @@ function getNewWord() {
     return WORDS[Math.floor(Math.random() * WORDS.length)];
 }
 
-module.exports = { createInitialState, guessLetter, getNewWord, MAX_WRONG, WORDS };
+module.exports = { createInitialState, setWord, guessLetter, getNewWord, MAX_WRONG, WORDS };

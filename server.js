@@ -365,16 +365,31 @@ app.prepare().then(() => {
                 // Swap roles
                 const entries = Object.entries(room.playerSymbols);
                 if (room.gameType === 'tic-tac-toe') {
+                    if (prevScores) {
+                        const temp = prevScores.X;
+                        prevScores.X = prevScores.O;
+                        prevScores.O = temp;
+                    }
                     room.playerSymbols = {
                         [entries[0][0]]: entries[0][1] === 'X' ? 'O' : 'X',
                         [entries[1][0]]: entries[1][1] === 'X' ? 'O' : 'X',
                     };
                 } else if (room.gameType === 'connect-four') {
+                    if (prevScores) {
+                        const temp = prevScores.red;
+                        prevScores.red = prevScores.yellow;
+                        prevScores.yellow = temp;
+                    }
                     room.playerSymbols = {
                         [entries[0][0]]: entries[0][1] === 'red' ? 'yellow' : 'red',
                         [entries[1][0]]: entries[1][1] === 'red' ? 'yellow' : 'red',
                     };
                 } else if (room.gameType === 'chess') {
+                    if (prevScores) {
+                        const temp = prevScores.white;
+                        prevScores.white = prevScores.black;
+                        prevScores.black = temp;
+                    }
                     room.playerSymbols = {
                         [entries[0][0]]: entries[0][1] === 'white' ? 'black' : 'white',
                         [entries[1][0]]: entries[1][1] === 'white' ? 'black' : 'white',
@@ -413,6 +428,22 @@ app.prepare().then(() => {
             handlePlayerLeave(sessionId, roomCode, true);
         });
 
+        socket.on('return-to-lobby', (roomCode) => {
+            const room = rooms.get(roomCode);
+            if (!room) return;
+            
+            room.status = 'waiting';
+            room.gameState = null;
+            room.rematchVotes.clear();
+            
+            room.players.forEach(p => p.isReady = false);
+            
+            io.to(roomCode).emit('returned-to-lobby');
+            io.to(roomCode).emit('room-joined', serializeRoom(room));
+            
+            console.log(`⬅️ Room ${roomCode} returned to lobby by ${session.username}`);
+        });
+
         socket.on('disconnect', () => {
             console.log(`⚠️ Disconnected: ${session.username} (${sessionId})`);
             if (session.roomCode) {
@@ -423,10 +454,10 @@ app.prepare().then(() => {
                         player.connected = false;
                         io.to(session.roomCode).emit('opponent-disconnected', sessionId);
                         
-                        // Set 60-second timer to fully disconnect and end the room
+                        // Set 5-minute timer to fully disconnect and end the room
                         session.disconnectTimer = setTimeout(() => {
                             handlePlayerLeave(sessionId, session.roomCode, false);
-                        }, 60000);
+                        }, 300000); // 5 minutes
                     }
                 }
             }

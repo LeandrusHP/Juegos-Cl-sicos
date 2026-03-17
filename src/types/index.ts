@@ -64,6 +64,7 @@ export interface ServerToClientEvents {
     'player-reconnected': (playerId: string) => void;
     'opponent-disconnected': (playerId?: string) => void;
     'opponent-reconnected': () => void;
+    'returned-to-lobby': () => void;
     'error': (message: string) => void;
 }
 
@@ -75,5 +76,6 @@ export interface ClientToServerEvents {
     'start-game': (roomCode: string) => void;
     'game-move': (data: { roomCode: string; move: GameMove }) => void;
     'request-rematch': (roomCode: string) => void;
+    'return-to-lobby': (roomCode: string) => void;
     'leave-room': (roomCode: string) => void;
 }

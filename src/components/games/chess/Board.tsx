@@ -190,6 +190,13 @@ export default function ChessBoard({
 
     return (
         <div className="glass rounded-2xl p-3 sm:p-4">
+            {/* Check Warning */}
+            {isCheck && isMyTurn && !disabled && (
+                <div className="mb-3 p-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm text-center font-bold animate-pulse">
+                    ⚠️ ¡Estás en Jaque! Debes mover o proteger a tu Rey.
+                </div>
+            )}
+
             {/* Opponent captured pieces */}
             <div className="flex items-center gap-1 mb-2 min-h-[20px] flex-wrap">
                 <span className="text-[10px] text-surface-500">Capturas:</span>

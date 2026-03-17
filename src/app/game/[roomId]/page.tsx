@@ -40,8 +40,8 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
 
     useEffect(() => {
         if (!username) { router.push('/'); return; }
-        if (!gameState) { router.push('/lobby'); }
-    }, [username, gameState, router]);
+        if (!gameState) { router.push(`/room/${roomId}`); }
+    }, [username, gameState, router, roomId]);
 
     const setupListeners = useCallback(() => {
         const socket = connectSocket();
@@ -54,8 +54,12 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
         });
         socket.on('opponent-disconnected', () => setOpponentDisconnected(true));
         socket.on('opponent-reconnected', () => setOpponentDisconnected(false));
+        socket.on('returned-to-lobby', () => {
+            resetGame();
+            router.push(`/room/${roomId}`);
+        });
         return socket;
-    }, [setGameState, setMySymbol, setOpponentDisconnected, resetGame]);
+    }, [setGameState, setMySymbol, setOpponentDisconnected, resetGame, router, roomId]);
 
     useEffect(() => {
         if (!username) return;
@@ -66,6 +70,7 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
             socket.off('game-started');
             socket.off('opponent-disconnected');
             socket.off('opponent-reconnected');
+            socket.off('returned-to-lobby');
         };
     }, [username, setupListeners]);
 
@@ -74,6 +79,7 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
     };
 
     const handleRematch = () => getSocket().emit('request-rematch', roomId);
+    const handleReturnToLobby = () => getSocket().emit('return-to-lobby', roomId);
     const handleLeave = () => {
         getSocket().emit('leave-room', roomId);
         resetGame();
@@ -149,8 +155,8 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
                 };
             case 'hangman':
                 return {
-                    myLabel: mySymbol === gs.currentTurn ? 'Adivinador 🧠' : 'Observador 👀',
-                    opLabel: mySymbol !== gs.currentTurn ? 'Adivinador 🧠' : 'Observador 👀',
+                    myLabel: mySymbol === gs.picker ? 'Selector 📝' : 'Adivinador 🧠',
+                    opLabel: mySymbol === gs.picker ? 'Adivinador 🧠' : 'Selector 📝',
                     myColor: 'primary',
                     opColor: 'accent',
                     myScore: gs.scores[mySymbol],
@@ -225,7 +231,7 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
                 {renderGameBoard(gameType, gs, mySymbol, isMyTurn, isGameOver, emitMove)}
 
                 {/* Game Over */}
-                {isGameOver && renderGameOver(gameType, gs, mySymbol, handleRematch, handleLeave)}
+                {isGameOver && renderGameOver(gameType, gs, mySymbol, handleRematch, handleReturnToLobby, handleLeave)}
 
                 {/* Leave Button */}
                 {!isGameOver && (
@@ -269,7 +275,8 @@ function getGameOverText(gameType: string, gs: any, mySymbol: string): string {
         case 'battleship':
             return gs.winner === mySymbol ? '🏆 ¡Hundiste toda la flota!' : '😔 Tu flota fue hundida';
         case 'hangman':
-            if (gs.winner === 'guesser') return '🏆 ¡Palabra adivinada!';
+            const wonHangman = gs.winner === 'guesser' ? mySymbol === gs.guesser : mySymbol === gs.picker;
+            if (wonHangman) return '🏆 ¡Palabra adivinada!';
             return '💀 ¡Ahorcado!';
         default:
             return '';
@@ -338,6 +345,9 @@ function renderGameBoard(gameType: string, gs: any, mySymbol: string, isMyTurn: 
         case 'hangman':
             return (
                 <HangmanBoard
+                    phase={gs.phase}
+                    picker={gs.picker}
+                    guesser={gs.guesser}
                     revealedWord={gs.revealedWord}
                     guessedLetters={gs.guessedLetters}
                     wrongLetters={gs.wrongLetters}
@@ -345,12 +355,13 @@ function renderGameBoard(gameType: string, gs: any, mySymbol: string, isMyTurn: 
                     maxWrong={gs.maxWrong}
                     hint={gs.hint}
                     isMyTurn={isMyTurn}
-                    isGuesser={mySymbol === gs.currentTurn || (gs.isFinished && mySymbol === 'player2')}
+                    isGuesser={mySymbol === gs.guesser}
                     isFinished={gs.isFinished}
                     winner={gs.winner}
                     word={gs.word}
-                    onGuess={(letter) => emitMove({ letter })}
-                    disabled={isGameOver}
+                    onGuess={(letter) => emitMove({ type: 'guess', letter })}
+                    onSetWord={(word, hint) => emitMove({ type: 'set-word', word, hint })}
+                    disabled={isGameOver || !isMyTurn}
                 />
             );
         default:
@@ -358,7 +369,7 @@ function renderGameBoard(gameType: string, gs: any, mySymbol: string, isMyTurn: 
     }
 }
 
-function renderGameOver(gameType: string, gs: any, mySymbol: string, onRematch: () => void, onLeave: () => void) {
+function renderGameOver(gameType: string, gs: any, mySymbol: string, onRematch: () => void, onReturnToLobby: () => void, onLeave: () => void) {
     if (gameType === 'tic-tac-toe') {
         return (
             <TicTacToeGameOver
@@ -367,6 +378,7 @@ function renderGameOver(gameType: string, gs: any, mySymbol: string, onRematch: 
                 mySymbol={mySymbol as 'X' | 'O'}
                 scores={gs.scores}
                 onRematch={onRematch}
+                onReturnToLobby={onReturnToLobby}
                 onLeave={onLeave}
             />
         );
@@ -374,9 +386,8 @@ function renderGameOver(gameType: string, gs: any, mySymbol: string, onRematch: 
 
     const iWon = (() => {
         if (gameType === 'hangman') {
-            // Complex: depends on who is guesser
-            if (gs.winner === 'guesser') return mySymbol === 'player2';
-            return mySymbol === 'player1';
+            if (gs.winner === 'guesser') return mySymbol === gs.guesser;
+            return mySymbol === gs.picker;
         }
         return gs.winner === mySymbol;
     })();
@@ -408,7 +419,7 @@ function renderGameOver(gameType: string, gs: any, mySymbol: string, onRematch: 
         'hangman': {
             emoji: iWon ? '🏆' : '😔',
             title: iWon ? '¡Ganaste!' : 'Perdiste',
-            subtitle: gs.winner === 'guesser' ? `La palabra era: ${gs.revealedWord?.join('') || ''}` : `La palabra era: ${gs.revealedWord?.join('') || ''}`,
+            subtitle: `La palabra era: ${gs.word || gs.revealedWord?.join('') || ''}`,
             scoreLabels: ['Tú', 'Empates', 'Rival'],
             scores: { a: gs.scores[mySymbol], b: gs.scores.draws, c: gs.scores[mySymbol === 'player1' ? 'player2' : 'player1'] },
         },
@@ -425,6 +436,7 @@ function renderGameOver(gameType: string, gs: any, mySymbol: string, onRematch: 
             scoreLabels={cfg.scoreLabels}
             scores={cfg.scores}
             onRematch={onRematch}
+            onReturnToLobby={onReturnToLobby}
             onLeave={onLeave}
         />
     );

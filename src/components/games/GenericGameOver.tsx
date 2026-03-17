@@ -7,6 +7,7 @@ interface GenericGameOverProps {
     scores: Record<string, number>;
     scoreLabels: [string, string, string];
     onRematch: () => void;
+    onReturnToLobby: () => void;
     onLeave: () => void;
 }
 
@@ -17,6 +18,7 @@ export default function GenericGameOver({
     scores,
     scoreLabels,
     onRematch,
+    onReturnToLobby,
     onLeave,
 }: GenericGameOverProps) {
     const keys = Object.keys(scores);
@@ -41,7 +43,8 @@ export default function GenericGameOver({
 
                 <div className="space-y-2">
                     <button onClick={onRematch} className="btn-primary w-full py-3">🔄 Revancha</button>
-                    <button onClick={onLeave} className="btn-secondary w-full py-3 text-sm">🚪 Salir</button>
+                    <button onClick={onReturnToLobby} className="btn-secondary w-full py-3">🏠 Volver a la Sala</button>
+                    <button onClick={onLeave} className="w-full py-3 text-sm text-surface-500 hover:text-red-400 transition-colors">🚪 Salir por completo</button>
                 </div>
             </div>
         </div>

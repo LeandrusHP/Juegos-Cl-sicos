@@ -1,6 +1,11 @@
 'use client';
 
+import { useState } from 'react';
+
 interface HangmanBoardProps {
+    phase: 'picking' | 'playing';
+    picker: string;
+    guesser: string;
     revealedWord: string[];
     guessedLetters: string[];
     wrongLetters: string[];
@@ -13,12 +18,16 @@ interface HangmanBoardProps {
     winner: string | null;
     word?: string;
     onGuess: (letter: string) => void;
+    onSetWord?: (word: string, hint: string) => void;
     disabled: boolean;
 }
 
 const ALPHABET = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
 
 export default function HangmanBoard({
+    phase,
+    picker,
+    guesser,
     revealedWord,
     guessedLetters,
     wrongLetters,
@@ -31,8 +40,68 @@ export default function HangmanBoard({
     winner,
     word,
     onGuess,
+    onSetWord,
     disabled,
 }: HangmanBoardProps) {
+    const [inputWord, setInputWord] = useState('');
+    const [inputHint, setInputHint] = useState('');
+
+    if (phase === 'picking') {
+        return (
+            <div className="glass rounded-2xl p-6 text-center space-y-6">
+                <div className="text-4xl mb-2">🤔</div>
+                <h2 className="text-xl font-bold text-white">Preparando el juego</h2>
+                
+                {isMyTurn ? (
+                    <div className="space-y-4 text-left">
+                        <p className="text-sm text-surface-400 text-center mb-6">
+                            Es tu turno de elegir la palabra que tu oponente deberá adivinar.
+                        </p>
+                        
+                        <div>
+                            <label className="block text-xs font-semibold text-primary-300 mb-1 ml-1">Palabra secreta</label>
+                            <input
+                                type="text"
+                                maxLength={20}
+                                value={inputWord}
+                                onChange={e => setInputWord(e.target.value.replace(/[^a-zA-ZñÑ]/g, '').toUpperCase())}
+                                placeholder="EJ. MURCIELAGO"
+                                className="w-full bg-surface-800/50 border border-surface-600/50 rounded-xl px-4 py-3 text-white text-lg font-mono tracking-widest placeholder:text-surface-600 focus:outline-none focus:border-primary-500/50"
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-xs font-semibold text-accent-300 mb-1 ml-1">Pista (opcional)</label>
+                            <input
+                                type="text"
+                                maxLength={40}
+                                value={inputHint}
+                                onChange={e => setInputHint(e.target.value)}
+                                placeholder="Mamífero volador"
+                                className="w-full bg-surface-800/50 border border-surface-600/50 rounded-xl px-4 py-3 text-white text-sm placeholder:text-surface-600 focus:outline-none focus:border-accent-500/50"
+                            />
+                        </div>
+
+                        <button
+                            onClick={() => {
+                                if (inputWord.length > 0 && onSetWord) {
+                                    onSetWord(inputWord, inputHint);
+                                }
+                            }}
+                            disabled={inputWord.length === 0 || disabled}
+                            className="btn-primary w-full py-3 mt-4"
+                        >
+                            ¡Jugar!
+                        </button>
+                    </div>
+                ) : (
+                    <div className="py-8">
+                        <p className="text-surface-400 animate-pulse">Esperando a que tu oponente elija una palabra...</p>
+                    </div>
+                )}
+            </div>
+        );
+    }
     return (
         <div className="glass rounded-2xl p-4 sm:p-6 space-y-5">
             {/* Hangman Drawing */}
