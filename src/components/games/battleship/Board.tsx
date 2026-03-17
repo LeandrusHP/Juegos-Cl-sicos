@@ -80,16 +80,16 @@ export default function BattleshipBoard({
         isOpponent: boolean,
         onClick?: (row: number, col: number) => void
     ) => (
-        <div>
+        <div className="w-full overflow-x-auto no-scrollbar pb-1">
             {/* Column headers */}
-            <div className="grid grid-cols-[24px_repeat(10,1fr)] gap-[2px] mb-[2px]">
+            <div className="grid grid-cols-[24px_repeat(10,1fr)] gap-[2px] mb-[2px] min-w-[280px]">
                 <div />
                 {Array(10).fill(null).map((_, i) => (
                     <div key={i} className="text-[10px] text-surface-500 text-center font-mono">{i + 1}</div>
                 ))}
             </div>
             {grid.map((row, ri) => (
-                <div key={ri} className="grid grid-cols-[24px_repeat(10,1fr)] gap-[2px] mb-[2px]">
+                <div key={ri} className="grid grid-cols-[24px_repeat(10,1fr)] gap-[2px] mb-[2px] min-w-[280px]">
                     <div className="text-[10px] text-surface-500 flex items-center justify-center font-mono">{LETTERS[ri]}</div>
                     {row.map((cell, ci) => {
                         const shot = shots?.[ri]?.[ci];

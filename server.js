@@ -307,7 +307,11 @@ app.prepare().then(() => {
                     break;
                 }
                 case 'hangman': {
-                    newState = hangman.guessLetter(room.gameState, move.letter, symbol);
+                    if (move.type === 'set-word') {
+                        newState = hangman.setWord(room.gameState, move.word, move.hint, symbol);
+                    } else if (move.type === 'guess') {
+                        newState = hangman.guessLetter(room.gameState, move.letter, symbol);
+                    }
                     break;
                 }
             }

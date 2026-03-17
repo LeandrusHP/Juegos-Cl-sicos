@@ -179,7 +179,7 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
 
     return (
         <div className="flex-1 flex flex-col items-center justify-start px-4 py-6 overflow-y-auto">
-            <div className="w-full max-w-lg animate-fade-in">
+            <div className={`w-full ${gameType === 'battleship' ? 'max-w-3xl' : 'max-w-lg'} animate-fade-in`}>
                 {/* Disconnect Warning */}
                 {isOpponentDisconnected && (
                     <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-400/20 text-amber-300 text-sm text-center animate-slide-down">
